@@ -2,6 +2,8 @@
 
 # 'dataclass' auto-generates __init__/repr/eq for the Config class below
 from dataclasses import dataclass
+# 'Random' lets us build an optionally-seedable RNG so episodes are reproducible
+from random import Random
 # 'randrange' picks a random integer from a range -> used to build random boards
 from random import randrange
 
@@ -20,19 +22,26 @@ class Config:
 # Board holds all game state and the rules for playing
 class Board:
     # constructor: takes a Config plus an optional pre-made grid
-    def __init__(self, config: Config, grid=None):
+    #   rng:       an optional random.Random, so board generation can be seeded
+    #   moves_used: starting move count (used by clone(); normally starts at 0)
+    def __init__(self, config: Config, grid=None, moves_used: int = 0, rng=None):
         # store the configuration for later use by every other method
         self.config = config
+        # keep the RNG (used by _random_grid, so it must be set first)
+        self.rng = rng
         # use the injected grid if given, otherwise create a random one
         self.grid = grid if grid is not None else self._random_grid()
         # count of valid flood moves the player has made so far
-        self.moves_used = 0
+        self.moves_used = moves_used
 
     # builds a fresh random puzzle grid
     def _random_grid(self):
         # unpack the grid size and color count into short local names
         n, c = self.config.size, self.config.colors
-        # create n rows, each with n cells, every cell a random color 0..c-1
+        # when a seeded RNG was provided, use it for reproducible randomness
+        if self.rng is not None:
+            return [[self.rng.randrange(c) for _ in range(n)] for _ in range(n)]
+        # otherwise fall back to the module-level random (unseeded behaviour)
         return [[randrange(c) for _ in range(n)] for _ in range(n)]
 
     # finds every cell connected to the top-left corner with the same color
@@ -97,3 +106,25 @@ class Board:
     def is_over(self):
         # game is over if solved, or if no moves remain
         return self.is_solved() or self.moves_left <= 0
+
+    # how many cells the flood currently owns -> the RL progress signal
+    @property
+    def coverage(self):
+        # every cell in the connected region is owned by the flood
+        return len(self.connected())
+
+    # read-only snapshot of the game state, safe to store and hash
+    def observe(self):
+        # freeze the grid into nested tuples so callers can't mutate it later
+        grid = tuple(tuple(row) for row in self.grid)
+        # bundle the move budget in -> the full Markov state for RL
+        return (grid, self.moves_left)
+
+    # independent copy for lookahead/search (MCTS, minimax, simulations)
+    def clone(self):
+        # deep-copy the grid rows so mutating the clone never hits the original
+        return Board(self.config,
+                     grid=[row[:] for row in self.grid],
+                     moves_used=self.moves_used,
+                     rng=self.rng)
+
