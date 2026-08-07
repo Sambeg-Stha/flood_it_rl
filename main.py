@@ -62,6 +62,14 @@ class Game:
         # place the button on the right side of the top frame
         self.new_button.pack(side="right")
 
+        # button that opens the settings dialog to adjust the board
+        self.settings_button = tk.Button(
+            self.top, text="Settings", font=("Segoe UI", 12),
+            command=self.open_settings,
+        )
+        # place the settings button to the left of the New Game button
+        self.settings_button.pack(side="right")
+
         # canvas widget where the board squares get drawn
         self.canvas = tk.Canvas(
             root, bg=GRID_BG,
@@ -79,6 +87,26 @@ class Game:
 
         # list where we store each swatch button (kept in case we need them)
         self.swatches = []
+        # draw the color swatches for this game's palette
+        self._build_palette()
+
+        # size the canvas and set per-cell pixels for the current config
+        self._apply_board_size()
+
+        # placeholder for the active board (real one created below)
+        self.board = None
+        # map from (row, col) to the canvas rectangle id of each drawn cell
+        self.rects = {}
+        # start the first game immediately
+        self.new_game()
+
+    # (re)create one swatch button for every color in the current config
+    def _build_palette(self):
+        # remove any swatches left over from a previous configuration
+        for widget in self.palette.winfo_children():
+            widget.destroy()
+        # reset the stored swatch list before filling it again
+        self.swatches = []
         # create one swatch button for every color in this game's palette
         for color in range(self.config.colors):
             # build a small colored square button for this color
@@ -93,18 +121,85 @@ class Game:
             # remember the button in our list
             self.swatches.append(btn)
 
+    # recompute the per-cell pixel size and resize the canvas to fit the board
+    def _apply_board_size(self):
         # pixel size of each board cell; shrinks for larger boards
         self.cell_size = 560 // max(10, self.config.size)
         # size the canvas to exactly fit size*size cells
         self.canvas.config(width=self.cell_size * self.config.size,
                            height=self.cell_size * self.config.size)
 
-        # placeholder for the active board (real one created below)
-        self.board = None
-        # map from (row, col) to the canvas rectangle id of each drawn cell
-        self.rects = {}
-        # start the first game immediately
-        self.new_game()
+    # pop up a modal dialog to change board size, colors, and move limit
+    def open_settings(self):
+        # temporary window layered on top of the main window
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Board Settings")
+        # keep the dialog attached to the main window and make it modal
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        dialog.configure(bg=GRID_BG)
+        # prevent clicks from reaching the main window while the dialog is open
+        dialog.grab_set()
+
+        # variables bound to the input widgets, pre-filled from current config
+        size_var = tk.IntVar(value=self.config.size)
+        colors_var = tk.IntVar(value=self.config.colors)
+        moves_var = tk.IntVar(value=self.config.move_limit)
+
+        # label that reports validation errors (hidden until something is wrong)
+        error = tk.Label(dialog, text="", fg="#e74c3c", bg=GRID_BG,
+                         font=("Segoe UI", 10))
+        error.grid(row=0, column=0, columnspan=2, pady=(10, 0))
+
+        # helper that adds one labeled spinbox row to the dialog
+        def add_field(row, label, variable, low, high):
+            tk.Label(dialog, text=label, fg="white", bg=GRID_BG,
+                     font=("Segoe UI", 12)).grid(row=row, column=0,
+                                                 sticky="e", padx=(12, 8), pady=6)
+            tk.Spinbox(dialog, from_=low, to=high, textvariable=variable,
+                       width=6, font=("Segoe UI", 12)).grid(row=row, column=1,
+                                                            sticky="w", padx=(0, 12), pady=6)
+
+        # fields: grid size 2..14, colors 2..8, moves 1..200
+        add_field(1, "Size:", size_var, 2, 14)
+        add_field(2, "Colors:", colors_var, 2, 8)
+        add_field(3, "Moves:", moves_var, 1, 200)
+
+        # applies the chosen values and rebuilds the game, or reports an error
+        def apply_settings():
+            # spinboxes allow typing, so clamp entries back into valid ranges
+            try:
+                size = max(2, min(14, size_var.get()))
+                colors = max(2, min(8, colors_var.get()))
+                moves = max(1, moves_var.get())
+            except tk.TclError:
+                # non-numeric text was typed into a field
+                error.config(text="Please enter valid numbers.")
+                return
+            # commit the new configuration
+            self.config.size = size
+            self.config.colors = colors
+            self.config.move_limit = moves
+            # resize the board, rebuild the color swatches, and start fresh
+            self._apply_board_size()
+            self._build_palette()
+            self.new_game()
+            # close the settings dialog
+            dialog.destroy()
+
+        # button frame holding OK and Cancel
+        buttons = tk.Frame(dialog, bg=GRID_BG)
+        buttons.grid(row=4, column=0, columnspan=2, pady=(6, 12))
+        tk.Button(buttons, text="OK", font=("Segoe UI", 11), width=8,
+                  command=apply_settings).pack(side="left", padx=6)
+        tk.Button(buttons, text="Cancel", font=("Segoe UI", 11), width=8,
+                  command=dialog.destroy).pack(side="left", padx=6)
+
+        # wait for the dialog to be drawn, then center it over the main window
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - dialog.winfo_width()) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 3
+        dialog.geometry(f"+{x}+{y}")
 
     # starts a fresh game: new board, redrawn, status reset
     def new_game(self):
@@ -192,12 +287,12 @@ def main():
     # read the arguments that the user actually passed on the command line
     args = parser.parse_args()
 
-    # reject grid sizes outside the playable range (2..40)
-    if not (2 <= args.size <= 40):
-        parser.error("size must be between 2 and 40")
+    # reject grid sizes outside the playable range (2..14)
+    if not (2 <= args.size <= 14):
+        parser.error("size must be between 2 and 14")
     # reject color counts that don't fit in the available palette
-    if not (2 <= args.colors <= len(PALETTE)):
-        parser.error(f"colors must be between 2 and {len(PALETTE)}")
+    if not (2 <= args.colors <= 8):
+        parser.error("colors must be between 2 and 8")
     # reject a move limit below 1
     if args.moves < 1:
         parser.error("moves must be at least 1")
