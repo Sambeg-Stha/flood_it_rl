@@ -1,7 +1,8 @@
 
+import math
 
 # 'dataclass' auto-generates __init__/repr/eq for the Config class below
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 # 'Random' lets us build an optionally-seedable RNG so episodes are reproducible
 from random import Random
 # 'randrange' picks a random integer from a range -> used to build random boards
@@ -11,12 +12,26 @@ from random import randrange
 # @dataclass decorator turns Config into a small data container
 @dataclass
 class Config:
-    # number of cells per side of the square grid (14x14 by default)
-    size: int = 14
-    # how many distinct colors the board can contain (default 6)
-    colors: int = 6
-    # how many moves the player is allowed before losing (default 25)
-    move_limit: int = 25
+    # number of cells per side of the square grid (3x3 by default)
+    size: int = 3
+    # how many distinct colors the board can contain (default 4)
+    colors: int = 4
+
+    # max-move interval bounds and the resulting move limit, all computed
+    # automatically from size + colors in __post_init__ (never set by hand)
+    left: float = field(init=False, default=0.0)
+    right: float = field(init=False, default=0.0)
+    # how many moves the player is allowed before losing (formula-derived)
+    move_limit: int = field(init=False, default=0)
+
+    # after the size/colors fields are set, derive the move budget from them
+    def __post_init__(self):
+        # lower bound of the recommended move interval
+        self.left = (math.sqrt(self.colors - 1) * self.size / 2) - self.colors / 2
+        # upper bound of the recommended move interval
+        self.right = 2 * self.size + (math.sqrt(2 * self.colors) * self.size) + self.colors
+        # the final allowance as the interval midpoint, truncated to an int
+        self.move_limit = int((self.left + self.right) / 2)
 
 
 # Board holds all game state and the rules for playing

@@ -57,8 +57,8 @@ def play_one_episode(env, seed):
 
 
 def main():
-    # a small board so printed grids stay readable (6x6, 3 colors, 25 moves)
-    env = FloodItEnv(size=14, colors=8, move_limit=25)
+    # build an env for the board; the move limit is auto-derived from size/colors
+    env = FloodItEnv(size=14, colors=8)
 
     # parse optional command-line arguments
     base_seed = int(argv[1]) if len(argv) > 1 else None  # seed, default random

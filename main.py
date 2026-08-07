@@ -144,7 +144,6 @@ class Game:
         # variables bound to the input widgets, pre-filled from current config
         size_var = tk.IntVar(value=self.config.size)
         colors_var = tk.IntVar(value=self.config.colors)
-        moves_var = tk.IntVar(value=self.config.move_limit)
 
         # label that reports validation errors (hidden until something is wrong)
         error = tk.Label(dialog, text="", fg="#e74c3c", bg=GRID_BG,
@@ -160,10 +159,9 @@ class Game:
                        width=6, font=("Segoe UI", 12)).grid(row=row, column=1,
                                                             sticky="w", padx=(0, 12), pady=6)
 
-        # fields: grid size 2..14, colors 2..8, moves 1..200
+        # fields: only size and colors; the move limit is auto-calculated
         add_field(1, "Size:", size_var, 2, 14)
         add_field(2, "Colors:", colors_var, 2, 8)
-        add_field(3, "Moves:", moves_var, 1, 200)
 
         # applies the chosen values and rebuilds the game, or reports an error
         def apply_settings():
@@ -171,15 +169,14 @@ class Game:
             try:
                 size = max(2, min(14, size_var.get()))
                 colors = max(2, min(8, colors_var.get()))
-                moves = max(1, moves_var.get())
             except tk.TclError:
                 # non-numeric text was typed into a field
                 error.config(text="Please enter valid numbers.")
                 return
-            # commit the new configuration
-            self.config.size = size
-            self.config.colors = colors
-            self.config.move_limit = moves
+            # commit the new configuration; build a fresh Config so move_limit
+            # is re-derived from the new size/colors (since it only computes
+            # at construction time)
+            self.config = Config(size=size, colors=colors)
             # resize the board, rebuild the color swatches, and start fresh
             self._apply_board_size()
             self._build_palette()
@@ -189,7 +186,7 @@ class Game:
 
         # button frame holding OK and Cancel
         buttons = tk.Frame(dialog, bg=GRID_BG)
-        buttons.grid(row=4, column=0, columnspan=2, pady=(6, 12))
+        buttons.grid(row=3, column=0, columnspan=2, pady=(6, 12))
         tk.Button(buttons, text="OK", font=("Segoe UI", 11), width=8,
                   command=apply_settings).pack(side="left", padx=6)
         tk.Button(buttons, text="Cancel", font=("Segoe UI", 11), width=8,
@@ -282,8 +279,6 @@ def main():
     parser.add_argument("--size", type=int, default=14, help="grid size (default 14)")
     # register a --colors flag, an integer, defaulting to 6
     parser.add_argument("--colors", type=int, default=6, help="number of colors (default 6)")
-    # register a --moves flag, an integer, defaulting to 25
-    parser.add_argument("--moves", type=int, default=25, help="move limit (default 25)")
     # read the arguments that the user actually passed on the command line
     args = parser.parse_args()
 
@@ -293,14 +288,12 @@ def main():
     # reject color counts that don't fit in the available palette
     if not (2 <= args.colors <= 8):
         parser.error("colors must be between 2 and 8")
-    # reject a move limit below 1
-    if args.moves < 1:
-        parser.error("moves must be at least 1")
 
     # create the root tkinter window
     root = tk.Tk()
-    # instantiate the Game object with the parsed settings
-    Game(root, Config(args.size, args.colors, args.moves))
+    # instantiate the Game object with the parsed settings (move limit is
+    # automatically derived from size and colors by Config)
+    Game(root, Config(args.size, args.colors))
     # enter tkinter's event loop, which keeps the window alive until closed
     root.mainloop()
 

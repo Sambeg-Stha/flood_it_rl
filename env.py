@@ -66,12 +66,13 @@ class FloodItEnv:
     def __init__(self, config: Config | None = None, size=None, colors=None,
                  move_limit=None, win_reward: float = 1.0, loss_reward: float = -1.0):
         # start from the caller's Config or a default-sized one
-        cfg = config if config is not None else Config()
-        # apply any keyword overrides on top of that base configuration
-        if size is not None:
-            cfg.size = size
-        if colors is not None:
-            cfg.colors = colors
+        base = config if config is not None else Config()
+        # resolve the final size/colors from explicit args or the base config
+        size = size if size is not None else base.size
+        colors = colors if colors is not None else base.colors
+        # build a fresh Config so move_limit is derived from the real size/colors
+        cfg = Config(size=size, colors=colors)
+        # optional manual override of the derived move budget
         if move_limit is not None:
             cfg.move_limit = move_limit
         # keep the final settings for constructing every new board
