@@ -7,6 +7,8 @@ import tkinter as tk
 
 # import the game logic classes from the sibling flood_it module
 from flood_it import Board, Config
+# import the greedy policy used by the Solve button and the best-move hint
+from solver import GreedyAgent
 
 # list of the actual hex color codes that back the palette (index = color number)
 PALETTE = [
@@ -26,6 +28,15 @@ PALETTE = [
 
 # dark gray used for the window background and the gaps between board cells
 GRID_BG = "#2d3436"
+
+# human-readable names for the palette, matching PALETTE index-by-index
+COLOR_NAMES = [
+    "Red", "Green", "Blue", "Yellow", "Purple", "Orange",
+    "Teal", "Off-White", "Pink", "Cyan", "Salmon", "Grey",
+]
+
+# text color used on top of the best-move hint swatch
+HINT_FG = "#1a1a1a"
 
 
 # Game wires the Board logic up to the tkinter widgets
@@ -54,6 +65,14 @@ class Game:
         # place the label on the left side of the top frame
         self.moves_label.pack(side="left")
 
+        # label that shows the greedy policy's recommended next move
+        self.hint_label = tk.Label(
+            self.top, text="Best next move: -", font=("Segoe UI", 11, "bold"),
+            fg=HINT_FG, bg=GRID_BG, padx=6,
+        )
+        # place the hint to the right of the move counter, separated by gaps
+        self.hint_label.pack(side="left", padx=(24, 0))
+
         # button that starts a fresh game when clicked
         self.new_button = tk.Button(
             self.top, text="New Game", font=("Segoe UI", 12),
@@ -69,6 +88,14 @@ class Game:
         )
         # place the settings button to the left of the New Game button
         self.settings_button.pack(side="right")
+
+        # button that auto-solves the current board with the greedy agent
+        self.solve_button = tk.Button(
+            self.top, text="Solve", font=("Segoe UI", 12),
+            command=self.solve,
+        )
+        # place the solve button to the left of the settings button
+        self.solve_button.pack(side="right", padx=(0, 8))
 
         # canvas widget where the board squares get drawn
         self.canvas = tk.Canvas(
@@ -97,6 +124,12 @@ class Game:
         self.board = None
         # map from (row, col) to the canvas rectangle id of each drawn cell
         self.rects = {}
+        # the greedy policy behind the Solve button and the best-move hint
+        self.agent = GreedyAgent()
+        # id of the pending after() step that drives the solve animation
+        self.solve_job = None
+        # milliseconds to wait between animated solver moves
+        self.solve_delay = 200
         # start the first game immediately
         self.new_game()
 
@@ -160,14 +193,14 @@ class Game:
                                                             sticky="w", padx=(0, 12), pady=6)
 
         # fields: only size and colors; the move limit is auto-calculated
-        add_field(1, "Size:", size_var, 2, 14)
+        add_field(1, "Size:", size_var, 2, 26)
         add_field(2, "Colors:", colors_var, 2, 8)
 
         # applies the chosen values and rebuilds the game, or reports an error
         def apply_settings():
             # spinboxes allow typing, so clamp entries back into valid ranges
             try:
-                size = max(2, min(14, size_var.get()))
+                size = max(2, min(26, size_var.get()))
                 colors = max(2, min(8, colors_var.get()))
             except tk.TclError:
                 # non-numeric text was typed into a field
@@ -198,14 +231,22 @@ class Game:
         y = self.root.winfo_y() + (self.root.winfo_height() - dialog.winfo_height()) // 3
         dialog.geometry(f"+{x}+{y}")
 
-    # starts a fresh game: new board, redrawn, status reset
+# starts a fresh game: new board, redrawn, status reset
     def new_game(self):
+        # cancel any in-progress solve animation before anything else
+        if self.solve_job is not None:
+            self.root.after_cancel(self.solve_job)
+            self.solve_job = None
+            # re-enable the buttons that the solver had disabled
+            self._solve_done()
         # generate a brand new random Board using the stored configuration
         self.board = Board(self.config)
         # redraw the canvas so it shows the new board
         self.draw()
         # refresh the move counter / status label
         self.update_status()
+        # refresh the greedy best-move hint (a solve may have ended it)
+        self.update_hint()
 
     # draws the current board state onto the canvas
     def draw(self):
@@ -241,6 +282,8 @@ class Game:
         self.draw()
         # update the move counter / win-lose text
         self.update_status()
+        # the board changed, so the best move may have changed too
+        self.update_hint()
 
     # translate a canvas mouse click into a board cell and pick its color
     def on_click(self, event):
@@ -254,6 +297,67 @@ class Game:
         if 0 <= r < n and 0 <= c < n:
             # flood using the color of the cell that was clicked
             self.pick(self.board.grid[r][c])
+
+    # refresh the hint that shows the greedy policy's recommended next move
+    def update_hint(self):
+        # no board yet, or the game has ended: there is nothing to recommend
+        if self.board is None or self.board.is_over():
+            self.hint_label.config(text="Best next move: -", bg=GRID_BG)
+            return
+        # ask the policy which color it would flood with right now
+        color = self.agent.select_move(self.board)
+        # a None move is only possible when every option is pointless
+        if color is None:
+            self.hint_label.config(text="Best next move: -", bg=GRID_BG)
+            return
+        # paint the hint with the recommended color and its human name
+        self.hint_label.config(
+            text=f"Best next move: {COLOR_NAMES[color]}",
+            bg=PALETTE[color],
+        )
+
+    # kick off an animated greedy solve of the current board
+    def solve(self):
+        # ignore clicks if there is no board or the game has already ended
+        if not self.board or self.board.is_over():
+            return
+        # block re-entry while the animation runs
+        self.solve_button.config(state="disabled")
+        self.new_button.config(state="disabled")
+        self.settings_button.config(state="disabled")
+        # start the first solve step
+        self._solve_step()
+
+    # performs one greedy move, then schedules the next (animates the solve)
+    def _solve_step(self):
+        # if the game ended, the solve is complete
+        if self.board.is_over():
+            self._solve_done()
+            return
+        # ask the greedy policy for the next move (stuck safety net)
+        color = self.agent.select_move(self.board)
+        if color is None:
+            self._solve_done()
+            return
+        # apply the chosen move through pick() so drawing/status/hint update
+        self.pick(color)
+        # schedule the following step unless the game just ended
+        if self.board.is_over():
+            self._solve_done()
+            return
+        self.solve_job = self.root.after(
+            self.solve_delay, self._solve_step)
+
+    # a solve has finished: re-enable the buttons and clear the job id
+    def _solve_done(self):
+        # re-enable the buttons that the solver disabled at the start
+        self.solve_button.config(state="normal")
+        self.new_button.config(state="normal")
+        self.settings_button.config(state="normal")
+        # nothing to clear if there was no in-flight step to begin with
+        if self.solve_job is not None:
+            self.solve_job = None
+        # refreshes of drawing & status are handled by pick on the last move
 
     # refresh the status label with moves remaining / result
     def update_status(self):
@@ -282,9 +386,9 @@ def main():
     # read the arguments that the user actually passed on the command line
     args = parser.parse_args()
 
-    # reject grid sizes outside the playable range (2..14)
-    if not (2 <= args.size <= 14):
-        parser.error("size must be between 2 and 14")
+    # reject grid sizes outside the playable range (2..26)
+    if not (2 <= args.size <= 26):
+        parser.error("size must be between 2 and 26")
     # reject color counts that don't fit in the available palette
     if not (2 <= args.colors <= 8):
         parser.error("colors must be between 2 and 8")

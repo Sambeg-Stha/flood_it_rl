@@ -8,6 +8,7 @@ from random import Random
 # 'randrange' picks a random integer from a range -> used to build random boards
 from random import randrange
 
+decrement_percentage : float = 37
 
 # @dataclass decorator turns Config into a small data container
 @dataclass
@@ -30,8 +31,11 @@ class Config:
         self.left = (math.sqrt(self.colors - 1) * self.size / 2) - self.colors / 2
         # upper bound of the recommended move interval
         self.right = 2 * self.size + (math.sqrt(2 * self.colors) * self.size) + self.colors
+
+        self.avg_ = int((self.left + self.right) / 2)
+
         # the final allowance as the interval midpoint, truncated to an int
-        self.move_limit = int((self.left + self.right) / 2)
+        self.move_limit = int(self.avg_ - self.avg_ * (decrement_percentage/100))
 
 
 # Board holds all game state and the rules for playing
