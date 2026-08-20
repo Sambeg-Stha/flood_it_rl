@@ -1,69 +1,55 @@
-# Greedy max-coverage solver for Flood-It
+#max area coverage  solver
 
-# argparse handles the command-line flags like --size and --colors
 import argparse
-
-# 'Random' lets us build a seedable RNG so every episode is reproducible
 from random import Random
 
-# import the game logic classes from the sibling flood_it module
+
 from flood_it import Board, Config
 
 
-# GreedyAgent is a deterministic policy: flood with the color that yields the
-# largest connected region on the very next move (ties -> lowest color index)
-
 class GreedyAgent:
+
     # returns the best color to flood the board with, or None if it is over
     def select_move(self, board: Board):
-        # no moves make sense once the game has ended
         if board.is_over():
             return None
 
-        # color currently owned by the flood -> flooding it is a wasted move
+        # color currently owned by the flood
         current = board.grid[0][0]
-
-        # track the best color found so far (None -> no candidate yet)
         best_color = None
-
-        # track its resulting coverage (start below any real value)
         best_coverage = -1
 
-        # try every color except the one we already own
+        # for a certain state try every color except the one we already own
         for color in range(board.config.colors):
-            # skip the current color so we never waste a turn
             if color == current:
                 continue
 
             # simulate the flood on an independent copy of the board
             sim = board.clone()
-            # (flood is guaranteed to succeed: color is valid and differs)
             sim.flood(color)
 
             # remember this color if it covers more newly-flooded cells
-            # ('>' not '>=' keeps the lower index when coverages are tied)
             if sim.coverage > best_coverage:
                 best_coverage = sim.coverage
                 best_color = color
 
-        # hand back the winning color (None if every move was pointless)
         return best_color
 
 
-# plays one game of Flood-It to completion using the given agent's policy
+#used in the main loop to run the greedy agent over many random boards
 def solve(board: Board, agent: GreedyAgent) -> Board:
-    # keep making greedy moves until the board is won or moves run out
     while not board.is_over():
-        # ask the agent which color to flood with (None = stuck safety net)
         color = agent.select_move(board)
         if color is None:
             break
-        # apply the chosen move to the board in place
         board.flood(color)
-    # return the finished board so callers can read is_solved/moves_used
+    # return the board so callers can read the best move
     return board
 
 
+"""
+this is for running greedy simulation without playing the game.
+"""
 # benchmark harness: run the greedy agent over many random boards
 def main():
     # create the command-line argument parser with a short description
