@@ -48,10 +48,10 @@ def update_memory(memory, state, action, reward):
     memory[state][action].append(reward)
 
 #choose action:
-def choose_action(board:Board, state, memory, epsilion, actions_space):
+def choose_action(board:Board, state, memory, epsilon, actions_space):
     current_color : int = board.grid[0][0]
 
-    if random.random() < epsilion:
+    if random.random() < epsilon:
         valid = []
         for c in range(actions_space):
             if c != current_color:
@@ -59,13 +59,13 @@ def choose_action(board:Board, state, memory, epsilion, actions_space):
         return random.choice(valid)
     else:
         avg_reward = []
-        for a in random(actions_space):
+        for a in range(actions_space):
             if a == current_color:
                 avg_reward.append(float("-inf"))
                 continue
-            reward = memory[state_space][a]
-            if reward:
-                avg_reward.append(sum(reward)/len(reward))
+            reward_list = memory.get(state, {}).get(a,[])
+            if reward_list:
+                avg_reward.append(sum(reward_list)/len(reward_list))
             else:
                 avg_reward.append(0.0)
         best = max(avg_reward)
@@ -74,7 +74,7 @@ def choose_action(board:Board, state, memory, epsilion, actions_space):
 
 def train(config: Config, epi, start, min_e, decay, print_every : int = 1000):
     action_space = config.colors
-    epsilion = start
+    epsilon = start
     #fresh memory
     train_memory = {}
     for i in range(1, epi + 1):
@@ -82,22 +82,22 @@ def train(config: Config, epi, start, min_e, decay, print_every : int = 1000):
         state = state_space(board)
 
         while not board.is_over():
-            action = choose_action(board, state, train_memory, epsilion, action_space)
+            action = choose_action(board, state, train_memory, epsilon, action_space)
             prev_cov = board.coverage
+            board.flood(action)
             r = reward(board, prev_cov)
 
             #updating the agent memeory
             update_memory(train_memory, state, action, r)
             state = state_space(board)
         
-        epsilion = max(min_e, epsilion * decay)
+        epsilon = max(min_e, epsilon * decay)
 
         if i % print_every == 0 :
-            print(f"Ep {i}/{epi} | EPSILION : {epsilion:.3f}")
+            print(f"Ep {i}/{epi} | EPSILION : {epsilon:.3f}")
     return train_memory
 
 
-#evaluation
 #evaluation
 def evaluate(memo, config : Config, ep = episodes):
     action_space = config.colors
@@ -109,7 +109,7 @@ def evaluate(memo, config : Config, ep = episodes):
         board = Board(config)
         while not board.is_over():
             state = state_space(board)
-            action = choose_action(board, state, memo, epsilion= 0.0, actions_space=action_space)
+            action = choose_action(board, state, memo, epsilon= 0.0, actions_space=action_space)
             board.flood(action)
 
         total_moves += board.moves_used
@@ -117,17 +117,17 @@ def evaluate(memo, config : Config, ep = episodes):
             solved += 1
             won_moves += board.moves_used
     print(f"size={config.size}x{config.size} colors={config.colors} "
-          f"move_limit={config.move_limit} eval_episodes={episodes}")
-    print(f"win rate: {solved}/{episodes} ({100.0 * solved / episodes:.1f}%)")
+          f"move_limit={config.move_limit} eval_episodes={ep}")
+    print(f"win rate: {solved}/{ep} ({100.0 * solved / ep:.1f}%)")
     if solved:
         print(f"avg moves (won): {won_moves / solved:.2f}")
-    print(f"avg moves (all): {total_moves / episodes:.2f}")
+    print(f"avg moves (all): {total_moves / ep:.2f}")
 
 def main():
     config : Config = Config(size=3, colors=3)
 
     trained_memory = train(config, episodes, e_start, e_min, e_deacy)
-    evaluate(trained_memory, config, ep= 100)
+    evaluate(trained_memory, config, ep= 1000)
 
 if __name__ == "__main__":
     main()
