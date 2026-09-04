@@ -8,7 +8,7 @@ import tkinter as tk
 # import the game logic classes from the sibling flood_it module
 from flood_it import Board, Config
 # import the greedy policy used by the Solve button and the best-move hint
-from solver import GreedyAgent
+from solver_method import GreedyAgent
 
 # list of the actual hex color codes that back the palette (index = color number)
 PALETTE = [
