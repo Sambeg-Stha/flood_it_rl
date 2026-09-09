@@ -5,6 +5,10 @@ from collections import defaultdict # Convenient for creating nested dictionarie
 from typing import Tuple, Dict, List, DefaultDict, Any # For type hinting
 from flood_it import Board, Config
 
+#file saving
+import os
+import csv
+
 # Set random seeds for reproducibility
 seed: int = 42
 random.seed(seed)
@@ -17,6 +21,8 @@ e_deacy = 0.995
 
 #iteration parameters
 episodes = 20000
+
+MEMORY = "model_data/simple_rl_agent.csv"
 
 #state space as board configuration for 3x3 color 3 board
 def state_space(board : Board):
@@ -46,6 +52,35 @@ def update_memory(memory, state, action, reward):
     if action not in memory[state]:
         memory[state][action] = []
     memory[state][action].append(reward)
+
+#cvs saves
+def save_memory(memory, path):
+    with open(path, "w", newline= "") as f:
+        writer = csv.writer(f)
+        writer.writerow(["state", "action", "reward(average)"])
+        for state, action in memory.items():
+            for action, reward_list in action.items():
+                avg = sum(reward_list)/len(reward_list)
+                state_str = "|".join(str(x) for x in state)
+                writer.writerow([state_str, action, avg])
+
+#load memory from csv
+def load_memory(path):
+    memo = {}
+    with open(path, "r") as f:
+        reader = csv.reader(f)
+        #skiping header like state|action|reward
+        next(reader)
+        for row in reader:
+            state_key = tuple(int(x) for x in row[0].split("|"))
+            action = int(row[1])
+            reward = float(row[2])
+            if state_key not in memo:
+                memo[state_key] = {}
+
+            memo[state_key][action] = reward
+    return memo
+
 
 #choose action:
 def choose_action(board:Board, state, memory, epsilon, actions_space):
@@ -123,10 +158,14 @@ def evaluate(memo, config : Config, ep = episodes):
         print(f"avg moves (won): {won_moves / solved:.2f}")
     print(f"avg moves (all): {total_moves / ep:.2f}")
 
+class RLagent:
+    pass
+
 def main():
     config : Config = Config(size=3, colors=3)
 
     trained_memory = train(config, episodes, e_start, e_min, e_deacy)
+    save_memory(trained_memory, MEMORY)
     evaluate(trained_memory, config, ep= 1000)
 
 if __name__ == "__main__":

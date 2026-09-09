@@ -9,6 +9,7 @@ import tkinter as tk
 from flood_it import Board, Config
 # import the greedy policy used by the Solve button and the best-move hint
 from solver_method import GreedyAgent
+from test_solver import RLagent
 
 # list of the actual hex color codes that back the palette (index = color number)
 PALETTE = [
@@ -125,7 +126,11 @@ class Game:
         # map from (row, col) to the canvas rectangle id of each drawn cell
         self.rects = {}
         # the greedy policy behind the Solve button and the best-move hint
-        self.agent = GreedyAgent()
+        if self.config.size == 3 and self.config.colors == 3:
+            print("USING RL AGENT IN THE MAIN GAME")
+            self.agent = RLagent()
+        else:
+            self.agent = GreedyAgent()
         # id of the pending after() step that drives the solve animation
         self.solve_job = None
         # milliseconds to wait between animated solver moves
@@ -210,6 +215,11 @@ class Game:
             # is re-derived from the new size/colors (since it only computes
             # at construction time)
             self.config = Config(size=size, colors=colors)
+            if self.config.size == 3 and self.config.colors == 3:
+                print("USING RL AGENT IN THE MAIN GAME")
+                self.agent = RLagent()
+            else:
+                self.agent = GreedyAgent()
             # resize the board, rebuild the color swatches, and start fresh
             self._apply_board_size()
             self._build_palette()
