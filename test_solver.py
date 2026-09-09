@@ -1,13 +1,11 @@
 # Import necessary libraries
 import numpy as np # For numerical operations (like mean)
 import random # For random choices (exploration, tie-breaking)
+import csv # for reading and writing the trained memory to file
+import os # for checking if the memory file exists
 from collections import defaultdict # Convenient for creating nested dictionaries for memory
 from typing import Tuple, Dict, List, DefaultDict, Any # For type hinting
 from flood_it import Board, Config
-
-#file saving
-import os
-import csv
 
 # Set random seeds for reproducibility
 seed: int = 42
@@ -20,9 +18,10 @@ e_min = 0.01
 e_deacy = 0.995
 
 #iteration parameters
-episodes = 100000
+episodes = 20000
 
-MEMORY = "model_data/simple_rl_agent.csv"
+#file to store trained agent memory
+MEMORY_CSV = "rl_agent_memory.csv"
 
 #state space as board configuration for 3x3 color 3 board
 def state_space(board : Board):
@@ -53,35 +52,36 @@ def update_memory(memory, state, action, reward):
         memory[state][action] = []
     memory[state][action].append(reward)
 
-#cvs saves
+#save trained memory to a csv file
 def save_memory(memory, path):
-    with open(path, "w", newline= "") as f:
+    with open(path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["state", "action", "reward(average)"])
-        for state, action in memory.items():
-            for action, reward_list in action.items():
-                avg = sum(reward_list)/len(reward_list)
+        #header
+        writer.writerow(["state", "action", "avg_reward"])
+        for state, actions in memory.items():
+            for action, reward_list in actions.items():
+                avg = sum(reward_list) / len(reward_list)
+                #pipe delimit the state tuple for easy loading
                 state_str = "|".join(str(x) for x in state)
                 writer.writerow([state_str, action, avg])
 
-#load memory from csv
+#load trained memory from a csv file
 def load_memory(path):
-    memo = {}
+    memory = {}
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "r") as f:
         reader = csv.reader(f)
-        #skiping header like state|action|reward
+        #skip header
         next(reader)
         for row in reader:
-            state_key = tuple(int(x) for x in row[0].split("|"))
+            state = tuple(int(x) for x in row[0].split("|"))
             action = int(row[1])
-            reward = float(row[2])
-            if state_key not in memo:
-                memo[state_key] = {}
-
-            memo[state_key][action] = [reward]
-    return memo
-
+            avg_reward = float(row[2])
+            if state not in memory:
+                memory[state] = {}
+            #store as a single-element list so choose_action still works
+            memory[state][action] = [avg_reward]
+    return memory
 
 #choose action:
 def choose_action(board:Board, state, memory, epsilon, actions_space):
@@ -159,25 +159,31 @@ def evaluate(memo, config : Config, ep = episodes):
         print(f"avg moves (won): {won_moves / solved:.2f}")
     print(f"avg moves (all): {total_moves / ep:.2f}")
 
-#RL AGENT  FOR MAIN GAME
 class RLagent:
     def __init__(self):
-        if not os.path.exists(MEMORY):
-            raise FileNotFoundError(f"{MEMORY} not found")
-        self.memo = load_memory(MEMORY)
+        #load the trained memory from csv
+        if not os.path.exists(MEMORY_CSV):
+            raise FileNotFoundError(f"{MEMORY_CSV} not found. Run test_solver.py first to train.")
+        print(f"Loading trained memory from {MEMORY_CSV}")
+        self.memory = load_memory(MEMORY_CSV)
 
-    def select_move(self, board : Board):
+    def select_move(self, board: Board):
         if board.is_over():
             return None
-        state_key = state_space(board)
-        return choose_action(board, state_key, self.memo, epsilon= 0.0, actions_space=board.config.colors)
+        state = state_space(board)
+        return choose_action(board, state, self.memory, epsilon=0.0,
+                             actions_space=board.config.colors)
 
 def main():
     config : Config = Config(size=3, colors=3)
 
+    #train and save memory to csv
     trained_memory = train(config, episodes, e_start, e_min, e_deacy)
-    save_memory(trained_memory, MEMORY)
-    evaluate(trained_memory, config, ep= 10000)
+    save_memory(trained_memory, MEMORY_CSV)
+    print(f"Trained memory saved to {MEMORY_CSV}")
+
+    #evaluate the trained memory
+    evaluate(trained_memory, config, ep= 1000)
 
 if __name__ == "__main__":
     main()

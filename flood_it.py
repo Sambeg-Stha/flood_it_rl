@@ -32,7 +32,7 @@ class Config:
         self.avg_ = int((self.left + self.right) / 2)
 
         # using the decrement percentage to adjust the move limit
-        self.move_limit = int(self.avg_ - self.avg_ * (decrement_percentage/100))
+        self.move_limit = int(self.avg_ - self.avg_ * (decrement_percentage/100)) - 2
 
 
 # Board configuration and state
