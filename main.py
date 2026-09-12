@@ -9,7 +9,7 @@ import tkinter as tk
 from flood_it import Board, Config
 # import the greedy policy used by the Solve button and the best-move hint
 from solver_method import GreedyAgent
-from solver_state_v2 import RLagent
+from q_solver import RLagent
 
 # list of the actual hex color codes that back the palette (index = color number)
 PALETTE = [

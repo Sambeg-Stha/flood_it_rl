@@ -16,13 +16,19 @@ np.random.seed(seed)
 
 #e greedy parameter
 e_start = 1
-e_min = 0.01
-e_deacy = 0.995
+e_min = 0.5
+e_deacy = 0.999
 
 #iteration parameters
 episodes = 500000
 
-MEMORY = "model_data/simple_rl_agent_state_v2_3x3_8.csv"
+#q learning values, 
+learn_rate = 0.2
+discount_rate = 0.8
+LOSS = -10
+WASTE = -1
+
+MEMORY = "model_data/q_data_v1.csv"
 
 #state space as board configuration for 3x3 color 3 board
 def state_space(board : Board):
@@ -62,28 +68,34 @@ def reward(board : Board,preconvergence : int) -> float:
     r : float = float(gain)
     if board.is_solved():
         r += 10.0
+    elif board.is_over():
+        r += LOSS
+    elif gain == 0:
+        r +=WASTE
     return r
 
 
-#memory of agent
-agent_memory = {}
-def update_memory(memory, state, action, reward):
-    if state not in memory:
-        memory[state] = {}
-    if action not in memory[state]:
-        memory[state][action] = []
-    memory[state][action].append(reward)
+#Q-learning
+def q_update(memo, state_, action_, reward_, next_state_, action_space, alpha ,gamma):
+    if state_ not in memo:
+        memo[state_] = {}
+    
+    #for next state terminal
+    max_future = 0.0
+    old_q_val = memo[state_].get(action_, 0)
+    if next_state_ is not None:
+        max_future = max(memo.get(next_state_, {}).get(a2, 0.0) for a2 in range(action_space) if a2 != next_state_[0])
+    memo[state_][action_] = old_q_val + alpha * (reward_ + gamma * max_future - old_q_val) 
 
 #cvs saves
 def save_memory(memory, path):
     with open(path, "w", newline= "") as f:
         writer = csv.writer(f)
-        writer.writerow(["state", "action", "reward(average)"])
-        for state, action in memory.items():
-            for action, reward_list in action.items():
-                avg = sum(reward_list)/len(reward_list)
-                state_str = "|".join(str(x) for x in state)
-                writer.writerow([state_str, action, avg])
+        writer.writerow(["state", "action", "q_value"])
+        for state, actions in memory.items():
+            state_str = "|".join(str(x) for x in state)
+            for action, q in actions.items():
+                writer.writerow([state_str, action, q])
 
 #load memory from csv
 def load_memory(path):
@@ -100,36 +112,29 @@ def load_memory(path):
             if state_key not in memo:
                 memo[state_key] = {}
 
-            memo[state_key][action] = [reward]
+            memo[state_key][action] = reward
     return memo
 
 
 #choose action:
-def choose_action(board:Board, state, memory, epsilon, actions_space):
-    current_color : int = board.grid[0][0]
+def choose_action(board, state, memory, epsilon, actions_space):
+    current_color = board.grid[0][0]
+    valid = [c for c in range(actions_space) if c != current_color]
 
     if random.random() < epsilon:
-        valid = []
-        for c in range(actions_space):
-            if c != current_color:
-                valid.append(c)
+        untried = [a for a in valid if a not in memory.get(state, {})]
+        if untried:
+            return random.choice(untried)   # try every action per state, once
         return random.choice(valid)
-    else:
-        avg_reward = []
-        for a in range(actions_space):
-            if a == current_color:
-                avg_reward.append(float("-inf"))
-                continue
-            reward_list = memory.get(state, {}).get(a,[])
-            if reward_list:
-                avg_reward.append(sum(reward_list)/len(reward_list))
-            else:
-                avg_reward.append(0.0)
-        best = max(avg_reward)
-        best_action = [a for a,v in enumerate(avg_reward) if v == best]
-        return random.choice(best_action)
+    # greedy (unchanged)
+    q_val = [float("-inf") if a == current_color
+             else memory.get(state, {}).get(a, 0.0)
+             for a in range(actions_space)]
+    best = max(q_val)
+    best_action = [a for a, v in enumerate(q_val) if v == best]
+    return random.choice(best_action)
 
-def train(config: Config, epi, start, min_e, decay, print_every : int = 1000):
+def train(config: Config, epi, start, min_e, decay, alpha, gamma, print_every : int = 1000):
     action_space = config.colors
     epsilon = start
     #fresh memory
@@ -144,11 +149,13 @@ def train(config: Config, epi, start, min_e, decay, print_every : int = 1000):
             board.flood(action)
             r = reward(board, prev_cov)
 
-            #updating the agent memeory
-            update_memory(train_memory, state, action, r)
-            state = state_space(board)
+            #updating the q table
+            next_state = None if board.is_over() else state_space(board)
+            q_update(train_memory, state, action, r, next_state, action_space, alpha, gamma)
+            state = next_state if next_state is not None else state
         
         epsilon = max(min_e, epsilon * decay)
+        alpha   = max(0.05, alpha * 0.9999) 
 
         if i % print_every == 0 :
             print(f"Ep {i}/{epi} | EPSILION : {epsilon:.3f}")
@@ -196,9 +203,9 @@ class RLagent:
 def main():
     config : Config = Config(size=3, colors=8)
 
-    trained_memory = train(config, episodes, e_start, e_min, e_deacy)
+    trained_memory = train(config, episodes, e_start, e_min, e_deacy, alpha=learn_rate, gamma=discount_rate)
     save_memory(trained_memory, MEMORY)
-    evaluate(trained_memory, config, ep= 10000)
+    evaluate(trained_memory, config, ep= 20000)
 
 if __name__ == "__main__":
     main()
