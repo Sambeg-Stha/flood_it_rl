@@ -10,6 +10,7 @@ from flood_it import Board, Config
 # import the greedy policy used by the Solve button and the best-move hint
 from solver_method import GreedyAgent
 from q_solver import RLagent
+from q_4_5 import Q_4_5
 
 # list of the actual hex color codes that back the palette (index = color number)
 PALETTE = [
@@ -127,8 +128,11 @@ class Game:
         self.rects = {}
         # the greedy policy behind the Solve button and the best-move hint
         if self.config.size == 3:
-            print("USING RL AGENT IN THE MAIN GAME")
+            print("USING 3x8")
             self.agent = RLagent()
+        elif self.config.size == 4:
+            print("USING 4x5")
+            self.agent = Q_4_5()
         else:
             self.agent = GreedyAgent()
         # id of the pending after() step that drives the solve animation
@@ -218,6 +222,9 @@ class Game:
             if self.config.size == 3:
                 print("USING RL AGENT IN THE MAIN GAME")
                 self.agent = RLagent()
+            elif self.config.size == 4:
+                print("USING 4x5")
+                self.agent = Q_4_5()
             else:
                 self.agent = GreedyAgent()
             # resize the board, rebuild the color swatches, and start fresh

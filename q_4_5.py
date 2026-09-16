@@ -1,7 +1,8 @@
-import numpy as np
-import random 
-from collections import defaultdict
-from typing import Tuple, Dict, List, DefaultDict, Any
+# Import necessary libraries
+import numpy as np # For numerical operations (like mean)
+import random # For random choices (exploration, tie-breaking)
+from collections import defaultdict # Convenient for creating nested dictionaries for memory
+from typing import Tuple, Dict, List, DefaultDict, Any # For type hinting
 from flood_it import Board, Config
 
 #file saving
@@ -19,15 +20,15 @@ e_min = 0.5
 e_deacy = 0.999
 
 #iteration parameters
-episodes = 500000
+episodes = 300000
 
 #q learning values, 
-learn_rate = 0.2
+learn_rate = 0.3
 discount_rate = 0.8
 LOSS = -10
 WASTE = -5
 
-MEMORY = "model_data/q_data_v1.csv"
+MEMORY = "model_data/q_data_4_8.csv"
 
 #state space as board configuration for 3x3 color 3 board
 def state_space(board : Board):
@@ -187,7 +188,7 @@ def evaluate(memo, config : Config, ep = episodes):
     print(f"avg moves (all): {total_moves / ep:.2f}")
 
 #RL AGENT  FOR MAIN GAME
-class RLagent:
+class Q_4_5:
     def __init__(self):
         if not os.path.exists(MEMORY):
             raise FileNotFoundError(f"{MEMORY} not found")
@@ -200,7 +201,7 @@ class RLagent:
         return choose_action(board, state_key, self.memo, epsilon= 0.0, actions_space=board.config.colors)
 
 def main():
-    config : Config = Config(size=3, colors=8)
+    config : Config = Config(size=4, colors=8)
 
     trained_memory = train(config, episodes, e_start, e_min, e_deacy, alpha=learn_rate, gamma=discount_rate)
     save_memory(trained_memory, MEMORY)
