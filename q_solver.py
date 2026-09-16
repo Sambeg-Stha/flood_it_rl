@@ -23,7 +23,7 @@ e_deacy = 0.999
 episodes = 500000
 
 #q learning values, 
-learn_rate = 0.2
+learn_rate = 0.3
 discount_rate = 0.8
 LOSS = -10
 WASTE = -1
