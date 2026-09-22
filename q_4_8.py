@@ -20,7 +20,7 @@ e_min = 0.5
 e_deacy = 0.999
 
 #iteration parameters
-episodes = 300000
+episodes = 500000
 
 #q learning values, 
 learn_rate = 0.3
@@ -188,7 +188,7 @@ def evaluate(memo, config : Config, ep = episodes):
     print(f"avg moves (all): {total_moves / ep:.2f}")
 
 #RL AGENT  FOR MAIN GAME
-class Q_4_5:
+class Q_4_8:
     def __init__(self):
         if not os.path.exists(MEMORY):
             raise FileNotFoundError(f"{MEMORY} not found")
