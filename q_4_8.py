@@ -25,7 +25,8 @@ episodes = 500000
 #q learning values, 
 learn_rate = 0.3
 discount_rate = 0.8
-LOSS = -10
+LOSS = -25
+WIN = 25
 WASTE = -5
 
 MEMORY = "model_data/q_data_4_8.csv"
@@ -59,7 +60,7 @@ def state_space(board : Board):
         key=lambda c: (boundary_counts.get(c, 0), -c)
     )
 
-    return (flood_color, flood_cells, best_outside, best_boundary)
+    return (flood_color, flood_cells, best_outside, best_boundary, board.moves_left)
 
 #reward enginnering convergence
 def reward(board : Board,preconvergence : int) -> float:
@@ -67,11 +68,11 @@ def reward(board : Board,preconvergence : int) -> float:
     #reward is based on how much board is flooded compared to the last move
     r : float = float(gain)
     if board.is_solved():
-        r += 10.0
+        r += WIN
     elif board.is_over():
         r += LOSS
     elif gain == 0:
-        r +=WASTE
+        r += WASTE
     return r
 
 
