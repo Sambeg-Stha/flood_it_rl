@@ -29,7 +29,7 @@ LOSS = -15
 WIN = 10
 WASTE = -10
 
-MEMORY = "model_data/q_data_4_8.csv"
+MEMORY = "model_data/q_data_5_8.csv"
 
 #state space as board configuration for 3x3 color 3 board
 def state_space(board : Board):
@@ -191,7 +191,7 @@ def evaluate(memo, config : Config, ep = episodes):
     print(f"avg moves (all): {total_moves / ep:.2f}")
 
 #RL AGENT  FOR MAIN GAME
-class Q_4_8:
+class Q_5_8:
     def __init__(self):
         if not os.path.exists(MEMORY):
             raise FileNotFoundError(f"{MEMORY} not found")
@@ -204,7 +204,7 @@ class Q_4_8:
         return choose_action(board, state_key, self.memo, epsilon= 0.0, actions_space=board.config.colors)
 
 def main():
-    config : Config = Config(size=4, colors=8)
+    config : Config = Config(size=5, colors=8)
 
     trained_memory = train(config, episodes, e_start, e_min, e_deacy, alpha=learn_rate, gamma=discount_rate)
     save_memory(trained_memory, MEMORY)

@@ -11,6 +11,7 @@ from flood_it import Board, Config
 from solver_method import GreedyAgent
 from q_solver import RLagent
 from q_4_8 import Q_4_8
+from q_5_8 import Q_5_8
 
 # list of the actual hex color codes that back the palette (index = color number)
 PALETTE = [
@@ -133,6 +134,9 @@ class Game:
         elif self.config.size == 4:
             print("USING 4x8")
             self.agent = Q_4_8()
+        elif self.config.size == 5:
+            print("USING 5x8")
+            self.agent = Q_5_8()
         else:
             self.agent = GreedyAgent()
         # id of the pending after() step that drives the solve animation
@@ -225,6 +229,9 @@ class Game:
             elif self.config.size == 4:
                 print("USING 4x8")
                 self.agent = Q_4_8()
+            elif self.config.size == 5:
+                print("USING 5x8")
+                self.agent = Q_5_8()
             else:
                 self.agent = GreedyAgent()
             # resize the board, rebuild the color swatches, and start fresh
