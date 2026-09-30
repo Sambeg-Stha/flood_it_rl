@@ -271,24 +271,6 @@ The next things worth trying, roughly in order:
 
 ## Known issues
 
-**`best_gain_color` is dead code.** It survived in all four `q_*_8.py` files from an
-earlier design and is no longer called — canonical action `1` replaced it. Safe to
-delete.
-
-**`RLagent` is imported but never used.** `main.py` line 12 imports it from
-`q_solver.py`, but the agent selection now only ever builds `Q_2_8`, `Q_3_8`,
-`Q_4_8`, `Q_5_8`, or `GreedyAgent`. The import can go.
-
-**`q_solver.py` points at a file that no longer exists.** Its table path is
-`model_data/q_data_v1.csv`, which has been deleted, so instantiating `RLagent`
-would raise `FileNotFoundError`. Harmless today only because nothing instantiates
-it. Delete the file or restore the table if you want to keep that prototype.
-
-**The four agent files are duplicated.** Any bug fix has to be applied four times,
-and they have already drifted apart once (the 5x5 file needed a different discount
-rate). Factoring them into one parameterized module would remove the whole
-category of error.
-
 **`save_memory` does not create its directory.** `load_memory` does
 (`q_*_8.py`, in `load_memory`). If `model_data/` is ever cleaned out, saving fails
 at the first checkpoint.
