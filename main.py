@@ -10,6 +10,8 @@ from flood_it import Board, Config
 # import the greedy policy used by the Solve button and the best-move hint
 from solver_method import GreedyAgent
 from q_solver import RLagent
+from q_2_8 import Q_2_8
+from q_3_8 import Q_3_8
 from q_4_8 import Q_4_8
 from q_5_8 import Q_5_8
 
@@ -128,9 +130,12 @@ class Game:
         # map from (row, col) to the canvas rectangle id of each drawn cell
         self.rects = {}
         # the greedy policy behind the Solve button and the best-move hint
-        if self.config.size == 3:
-            print("USING 3x8")
-            self.agent = RLagent()
+        if self.config.size == 2:
+            print("2x8")
+            self.agent = Q_2_8()
+        elif self.config.size == 3:
+            print("3x8")
+            self.agent = Q_3_8()
         elif self.config.size == 4:
             print("USING 4x8")
             self.agent = Q_4_8()
@@ -223,9 +228,12 @@ class Game:
             # is re-derived from the new size/colors (since it only computes
             # at construction time)
             self.config = Config(size=size, colors=colors)
-            if self.config.size == 3:
-                print("USING RL AGENT IN THE MAIN GAME")
-                self.agent = RLagent()
+            if self.config.size == 2:
+                print("2x8")
+                self.agent = Q_2_8()
+            elif self.config.size == 3:
+                print("3x8")
+                self.agent = Q_3_8()
             elif self.config.size == 4:
                 print("USING 4x8")
                 self.agent = Q_4_8()

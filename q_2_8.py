@@ -27,14 +27,14 @@ episodes = 500000
 
 #q learning values, 
 learn_rate = 0.3
-discount_rate = 0.95
+discount_rate = 0.9
 LOSS = -15
 WIN = 10
 WASTE = -10
 SHAPE = 10.0     # scales the progress reward
 STEP = -0.05     # small cost per move, discourages long routes
 
-MEMORY = "model_data/q_data_5_8_v3.csv"
+MEMORY = "model_data/q_data_2_8_v3.csv"
 
 # canonical colours: 0 = the one we own, 1 = biggest gain, 2 = next, then the rest.
 # returns (real colour for each canonical label, gains sorted best first)
@@ -229,7 +229,7 @@ def evaluate(memo, config, grids):
     print(f"avg moves (all): {total_moves / ep:.2f}")
 
 #RL AGENT  FOR MAIN GAME
-class Q_5_8:
+class Q_2_8:
     def __init__(self):
         if not os.path.exists(MEMORY):
             raise FileNotFoundError(f"{MEMORY} not found")
@@ -243,7 +243,7 @@ class Q_5_8:
         return to_real[action]
 
 def main():
-    config : Config = Config(size=5, colors=8)
+    config : Config = Config(size=2, colors=8)
 
     # checkpoints are scored on these fixed boards
     eval_grids = make_eval_grids(config, 2000, EVAL_SEED)

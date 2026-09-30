@@ -4,6 +4,7 @@ import random # For random choices (exploration, tie-breaking)
 from collections import defaultdict # Convenient for creating nested dictionaries for memory
 from typing import Tuple, Dict, List, DefaultDict, Any # For type hinting
 from flood_it import Board, Config
+from random import Random
 
 #file saving
 import os
@@ -11,12 +12,14 @@ import csv
 
 # Set random seeds for reproducibility
 seed: int = 42
+EVAL_SEED = 1234
+FINAL_SEED = 999
 random.seed(seed)
 np.random.seed(seed)
 
 #e greedy parameter
 e_start = 1
-e_min = 0.45
+e_min = 0.05
 e_deacy = 0.999
 
 #iteration parameters
@@ -24,55 +27,51 @@ episodes = 500000
 
 #q learning values, 
 learn_rate = 0.3
-discount_rate = 0.5
+discount_rate = 0.9
 LOSS = -15
 WIN = 10
 WASTE = -10
+SHAPE = 10.0     # scales the progress reward
+STEP = -0.05     # small cost per move, discourages long routes
 
-MEMORY = "model_data/q_data_4_8.csv"
+MEMORY = "model_data/q_data_4_8_v3.csv"
+
+# canonical colours: 0 = the one we own, 1 = biggest gain, 2 = next, then the rest.
+# returns (real colour for each canonical label, gains sorted best first)
+def canonical_view(board):
+    current = board.grid[0][0]
+    now = board.coverage
+    valid = [c for c in range(board.config.colors) if c != current]
+
+    gains = []
+    for color in valid:
+        sim = board.clone()
+        sim.flood(color)
+        gains.append(sim.coverage - now)
+
+    # biggest gain first; ties keep the lower colour index ahead
+    order = sorted(range(len(valid)), key=lambda i: (-gains[i], valid[i]))
+
+    to_real = [current]
+    for i in order:
+        to_real.append(valid[i])
+
+    return to_real, [gains[i] for i in order]
 
 #state space as board configuration for 3x3 color 3 board
 def state_space(board : Board):
-    flood_color = board.grid[0][0]
-    flood_cells = board.coverage
-    flooded = board.connected()
-
-    outside_counts = {}
-    boundary_counts = {}
-    for r, row in enumerate(board.grid):
-        for c, color in enumerate(row):
-            if (r, c) in flooded:
-                continue
-            outside_counts[color] = outside_counts.get(color, 0) + 1
-            
-            # cell belongs to the boundary if any neighbor is part of the flood
-            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                if (r + dr, c + dc) in flooded:
-                    boundary_counts[color] = boundary_counts.get(color, 0) + 1
-                    break  # count each cell once, even if it touches the flood on 2 sides
-
-    best_outside = max(
-        range(board.config.colors),
-        key=lambda c: (outside_counts.get(c, 0), -c)
-    )
-    best_boundary = max(
-        range(board.config.colors),
-        key=lambda c: (boundary_counts.get(c, 0), -c)
-    )
-
-    return (flood_color, flood_cells, best_outside, best_boundary, board.moves_left)
+    to_real, ordered = canonical_view(board)
+    return (board.coverage, ordered[0], ordered[1], board.moves_left), to_real
 
 #reward enginnering convergence
-def reward(board : Board,preconvergence : int, gamma : float) -> float:
-    #gain is rewad based on convergance relative to the size of baord
+def reward(board : Board, preconvergence : int) -> float:
     n = board.config.size ** 2
     if board.is_solved():
         return WIN
     if board.is_over():
         return LOSS
-    new = board.coverage / n
-    prev = preconvergence / n
-    r = -0.05 + gamma * new - prev
+    gain = (board.coverage - preconvergence) / n
+    r = STEP + SHAPE * gain
     if board.coverage == preconvergence:
         r += WASTE
     return r
@@ -87,9 +86,11 @@ def q_update(memo, state_, action_, reward_, next_state_, action_space, alpha ,g
     max_future = 0.0
     old_q_val = memo[state_].get(action_, 0)
     if next_state_ is not None:
-        max_future = max(memo.get(next_state_, {}).get(a2, 0.0) for a2 in range(action_space) if a2 != next_state_[0])
-    memo[state_][action_] = old_q_val + alpha * (reward_ + gamma * max_future - old_q_val) 
-
+        row = memo.get(next_state_, {})
+        # only consider actions that have actually been visited
+        known = [row[a] for a in range(1, action_space) if a in row]
+        max_future = max(known) if known else 0.0
+    memo[state_][action_] = old_q_val + alpha * (reward_ + gamma * max_future - old_q_val)
 #cvs saves
 def save_memory(memory, path):
     with open(path, "w", newline= "") as f:
@@ -119,70 +120,107 @@ def load_memory(path):
     return memo
 
 
+# picks the color with the highest gain; valid colors in color order
+def best_gain_color(board, valid, gains):
+    best = valid[0]
+    best_gain = -1
+    for i, color in enumerate(valid):
+        if gains[i] > best_gain:
+            best_gain = gains[i]
+            best = color
+    return best
+
 #choose action:
-def choose_action(board, state, memory, epsilon, actions_space):
-    current_color = board.grid[0][0]
-    valid = [c for c in range(actions_space) if c != current_color]
+def choose_action(state, memory, epsilon, actions_space):
+    row = memory.get(state, {})
 
     if random.random() < epsilon:
-        untried = [a for a in valid if a not in memory.get(state, {})]
+        untried = [a for a in range(1, actions_space) if a not in row]
         if untried:
             return random.choice(untried)   # try every action per state, once
-        return random.choice(valid)
-    # greedy (unchanged)
-    q_val = [float("-inf") if a == current_color
-             else memory.get(state, {}).get(a, 0.0)
-             for a in range(actions_space)]
-    best = max(q_val)
-    best_action = [a for a, v in enumerate(q_val) if v == best]
-    return random.choice(best_action)
+        return random.choice(range(1, actions_space))
 
-def train(config: Config, epi, start, min_e, decay, alpha, gamma, print_every : int = 1000):
+    known = [a for a in range(1, actions_space) if a in row]
+    if not known:
+        return 1                   # canonical 1 is always the biggest gain
+
+    best = max(row[a] for a in known)
+    tied = [a for a in known if row[a] == best]
+    return min(tied)
+
+def train(config: Config, epi, start, min_e, decay, alpha, gamma, eval_grids=None, print_every: int = 1000, eval_every: int = 25000):
     action_space = config.colors
     epsilon = start
     #fresh memory
     train_memory = {}
+    best_score = -1.0
     for i in range(1, epi + 1):
-        board = Board(config)
-        state = state_space(board)
+        board = Board(config, rng=Random(seed * 1000003 + i))
+        state, to_real = state_space(board)
 
         while not board.is_over():
-            action = choose_action(board, state, train_memory, epsilon, action_space)
+            action = choose_action(state, train_memory, epsilon, action_space)
             prev_cov = board.coverage
-            board.flood(action)
-            r = reward(board, prev_cov, gamma)
+            board.flood(to_real[action])
+            r = reward(board, prev_cov)
 
-            #updating the q table
-            next_state = None if board.is_over() else state_space(board)
-            q_update(train_memory, state, action, r, next_state, action_space, alpha, gamma)
-            state = next_state if next_state is not None else state
-        
+            if board.is_over():
+                q_update(train_memory, state, action, r, None, action_space, alpha, gamma)
+            else:
+                next_state, to_real = state_space(board)
+                q_update(train_memory, state, action, r, next_state, action_space, alpha, gamma)
+                state = next_state
+
         epsilon = max(min_e, epsilon * decay)
-        alpha   = max(0.05, alpha * 0.9999) 
+
 
         if i % print_every == 0 :
             print(f"Ep {i}/{epi} | EPSILION : {epsilon:.3f}")
-    return train_memory
 
+        if eval_grids and i % eval_every == 0:
+            score = win_rate(train_memory, config, eval_grids)
+            mark = "  <- best" if score > best_score else ""
+            print(f"   eval @ {i}: {100 * score:.1f}%{mark}")
+            if score > best_score:
+                best_score = score
+                save_memory(train_memory, MEMORY)
+    return best_score
+
+# fixed eval puzzles, so every checkpoint is scored on identical boards
+def make_eval_grids(config, count, base):
+    return [Board(config, rng=Random(base + i)).grid for i in range(count)]
+
+# plays one grid to the end with the greedy policy
+def play(memo, config, grid):
+    board = Board(config, grid=[row[:] for row in grid])
+    while not board.is_over():
+        state, to_real = state_space(board)
+        action = choose_action(state, memo, epsilon=0.0, actions_space=config.colors)
+        board.flood(to_real[action])
+    return board
+
+# just the win rate, used as the checkpoint score
+def win_rate(memo, config, grids):
+    solved = 0
+    for grid in grids:
+        if play(memo, config, grid).is_solved():
+            solved += 1
+    return solved / len(grids)
 
 #evaluation
-def evaluate(memo, config : Config, ep = episodes):
-    action_space = config.colors
+def evaluate(memo, config, grids):
     solved = 0
     total_moves = 0
     won_moves = 0
 
-    for _ in range(ep):
-        board = Board(config)
-        while not board.is_over():
-            state = state_space(board)
-            action = choose_action(board, state, memo, epsilon= 0.0, actions_space=action_space)
-            board.flood(action)
-
+    for grid in grids:
+        board = play(memo, config, grid)
         total_moves += board.moves_used
         if board.is_solved():
             solved += 1
             won_moves += board.moves_used
+
+    ep = len(grids)
     print(f"size={config.size}x{config.size} colors={config.colors} "
           f"move_limit={config.move_limit} eval_episodes={ep}")
     print(f"win rate: {solved}/{ep} ({100.0 * solved / ep:.1f}%)")
@@ -200,15 +238,24 @@ class Q_4_8:
     def select_move(self, board : Board):
         if board.is_over():
             return None
-        state_key = state_space(board)
-        return choose_action(board, state_key, self.memo, epsilon= 0.0, actions_space=board.config.colors)
+        state, to_real = state_space(board)
+        action = choose_action(state, self.memo, epsilon= 0.0, actions_space=board.config.colors)
+        return to_real[action]
 
 def main():
     config : Config = Config(size=4, colors=8)
 
-    trained_memory = train(config, episodes, e_start, e_min, e_deacy, alpha=learn_rate, gamma=discount_rate)
-    save_memory(trained_memory, MEMORY)
-    evaluate(trained_memory, config, ep= 20000)
+    # checkpoints are scored on these fixed boards
+    eval_grids = make_eval_grids(config, 2000, EVAL_SEED)
+
+    best_score = train(config, episodes, e_start, e_min, e_deacy,
+                       alpha=learn_rate, gamma=discount_rate,
+                       eval_grids=eval_grids)
+    print(f"best checkpoint win rate: {100 * best_score:.1f}%")
+
+    # final report uses a DIFFERENT seed: picking the best of 20 checkpoints on
+    # eval_grids means eval_grids is now a selection set, not a clean test set
+    evaluate(load_memory(MEMORY), config, make_eval_grids(config, 20000, FINAL_SEED))
 
 if __name__ == "__main__":
     main()
