@@ -118,10 +118,8 @@ information than anything cheaper — it knows the difference between one color
 offering a six-cell blob and the same color appearing as five disconnected
 single cells, which look identical to any count-based shortcut.
 
-### Colour canonicalization — the fix that mattered
+### Colour canonicalization
 
-This is worth understanding, because the first version of the new state failed
-badly (0.5% win rate) and the reason is instructive.
 
 The naive version of the state included *how many* cells each color offered but
 not *which* color. That looks fine, and it isn't. Consider two boards that both
