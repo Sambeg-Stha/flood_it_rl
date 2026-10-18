@@ -99,8 +99,6 @@ agent chases big immediate captures and ignores whether it will actually finish.
 half the total progress reward available in a whole game.
 
 ### The state
-.
-
 A Q-table is just a number stored per (state, action) pair. Those numbers are only
 trustworthy if each pair gets visited a reasonable number of times. So the state
 needs to describe the board well enough to tell positions apart, but not so
@@ -112,29 +110,21 @@ The current state has four numbers:
 (cells flooded, best possible gain, second best gain, moves remaining)
 ```
 
-**"Best possible gain"** is the real prize: the agent copies the board, floods with
-each color, and counts how many cells it would win. That number carries more
-information than anything cheaper — it knows the difference between one color
-offering a six-cell blob and the same color appearing as five disconnected
-single cells, which look identical to any count-based shortcut.
+**"Best possible gain"**: the agent copies the board, floods with
+each color, and counts how many cells it would win. 
 
 ### Colour canonicalization
-
-
 The naive version of the state included *how many* cells each color offered but
-not *which* color. That looks fine, and it isn't. Consider two boards that both
+not *which* color.
+
+Consider two boards that both
 have one color offering a 4-cell gain and all others offering nothing — one where
 the good color is red, one where it's blue. Under that state, both boards collapse
 into the **same key**. So `Q[state][red]` gets trained partly from boards where red
 is the great move and partly from boards where red is useless. Average them and you
 get mush.
 
-That is exactly what happened. The trained agent picked the genuinely best move
-only **16.8%** of the time — barely better than random — and wasted **59.5%** of
-its turns. It had learned "every color is mediocre," which is true on average and
-useless in practice.
-
-The fix is to stop treating colors as fixed labels. Before building the state, the
+Before building the state, the
 board is relabelled into a canonical order:
 
 | Canonical label | Meaning |
@@ -145,11 +135,8 @@ board is relabelled into a canonical order:
 | `3`–`7` | the rest |
 
 Now canonical action `1` **always** means "the best move," in every board, forever.
-`Q[state][1]` is unambiguous. And because the labels no longer carry real color
-information, the state doesn't need a color field at all.
 
-The table gets dramatically smaller and denser, because every state now pools what
-it learned across all color arrangements:
+`Q[state][1]` is unambiguous. And because the labels no longer carry real color information, the state doesn't need a color field at all.
 
 | Board | States before | States after | Actions learned per state before → after |
 |-------|---------------|--------------|--------------------------------------------|
@@ -175,10 +162,6 @@ out at `e_min` after roughly 800–3,000 episodes. It is *not* a gradual fade ac
 the whole run. An earlier version sat at `e_min = 0.45` for 99.8% of training,
 meaning nearly half of everything the table ever learned came from random moves.
 
-**The learning rate is not decayed.** A decaying alpha is meant for states you
-revisit millions of times. These tables see each entry a handful of times, so
-alpha stays high.
-
 **Discounts are checked against the move limit, not chosen by feel.** A win is
 worth `+10` but arrives at the very end. With gamma `0.8` on a 10-move board, the
 value of a future win at move 1 is `0.8¹¹ ≈ 0.09` — the agent literally cannot
@@ -189,35 +172,8 @@ tell a winnable position from a lost one. At `0.95` that rises to `0.57`.
 1. If we are still exploring, prefer a move this state has never tried, else pick
    at random.
 2. Otherwise take the move with the highest learned value.
-3. If the table knows nothing about this state, or two moves tie, fall back to the
-   best immediate gain.
-
-Step 3 matters more than it should. Because the table is sparse, plenty of states
-have never been seen, and an unseen state used to mean "play randomly" — which
-showed up directly as lost games.
-
+3. If the table knows nothing about this state, or two moves tie, fall back to the best immediate gain.
 ---
-
-## Checking the state space
-
-`q_learning.py` answers the question *"is this table getting enough visits per
-state to learn anything?"* without training anything. It plays 2,000 boards using
-the greedy policy and counts how many distinct states appear and how often each is
-revisited.
-
-```bash
-python q_learning.py
-```
-
-Two numbers come out. `distinct states` should be well under the theoretical
-maximum — if the agent only ever reaches a small slice, a wide state space costs
-you nothing. `avg visits/state` should be comfortably above about 20; below 8, the
-state has more features than the training data can support, and the fix is to
-round the gain numbers into buckets like `0 / 1 / 2-3 / 4+` instead of using exact
-counts.
-
----
-
 ## Results
 
 Measured on 2,000 held-out boards that were never used for training or for picking
@@ -229,53 +185,3 @@ a checkpoint (seed 999):
 | 3x3 | 7 | 96.7% | 96.7% | 400 | 5.05 |
 | 4x4 | 10 | 88.9% | 86.8% | 1,547 | 3.99 |
 | 5x5 | 12 | 71.7% | 64.8% | 4,145 | 3.86 |
-
-**Read this honestly: the Q-table is currently matching the greedy heuristic on the
-small boards and losing to it on the larger ones.** It is not yet outperforming
-the thing it was built on top of.
-
-That is the open problem, not a finished result. Two caveats on the numbers:
-
-- These tables came from partial training runs, not the full 500,000 episodes. The
-  4x4 table in particular is small enough to suggest an early checkpoint was the
-  best one found.
-- The gap is small enough to partly be sampling noise, but the direction is
-  consistent across both large sizes, so it is probably real.
-
-The next things worth trying, roughly in order:
-
-1. **Finish the training runs.** Both large tables are from incomplete runs.
-2. **Sweep `SHAPE`.** The progress reward weight is the least-tuned number in the
-   reward and the most likely to be mistuned.
-3. **Add the missing diagnostic.** Measure how often the agent picks the genuinely
-   best move and how often it wastes a turn. This is what caught the
-   canonicalization bug — it reported 16.8% and 59.5% when the agent was
-   effectively random. Those two numbers are a better health check than win rate
-   alone.
-4. **Resolve the tie-breaking shortcut.** Ties in gain are currently broken by real
-   color index, which is not fully invariant under relabeling, leaving a little
-   residual mixing. Breaking ties on a board property instead (such as where on the
-   board the first captured cell sits) would close it.
-
----
-
-## Known issues
-
-**`save_memory` does not create its directory.** `load_memory` does
-(`q_*_8.py`, in `load_memory`). If `model_data/` is ever cleaned out, saving fails
-at the first checkpoint.
-
----
-
-## Model data
-
-`model_data/` holds the learned tables as CSV, one file per board size, named
-`q_data_<size>_<colors>_v3.csv`. Each row is `state|action|q_value`.
-
-The `_v3` suffix marks tables built with the canonicalized four-number state.
-Earlier tables (`q_data_4_8.csv`, `q_data_5_8.csv`) use the older five-number state
-and **cannot be loaded by the current agents** — the keys mean different things.
-They are kept only for comparison.
-
-Every agent class raises `FileNotFoundError` at startup if its table is missing,
-so train before opening the GUI at a size you have not trained yet.
