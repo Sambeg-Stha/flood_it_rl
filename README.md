@@ -39,8 +39,7 @@ train before playing if you want the agent to drive the Solve button.
 | `main.py` | The tkinter game window. Wires the board to the screen, the mouse, and the Solve button. |
 | `solver_method.py` | `GreedyAgent` — the heuristic player. Also has a standalone benchmark you can run. |
 | `q_2_8.py` `q_3_8.py` `q_4_8.py` `q_5_8.py` | The trained Q-learning agents, one per board size. |
-| `q_learning.py` | A small measurement script (not an agent). See [Checking the state space](#checking-the-state-space). |
-| `q_solver.py` | The original prototype agent. Kept for reference only — see [Known issues](#known-issues). |
+
 
 The four `q_*_8.py` files are **identical copies**. They differ only in three
 lines: the table filename, the class name, and the board size. To add a new size,
@@ -75,11 +74,6 @@ it never makes a bad move in the sense of wasting the turn.
 It is a surprisingly strong baseline, which matters more than it sounds — see
 [Results](#results).
 
-You can benchmark it on its own:
-
-```bash
-python solver_method.py --size 5 --colors 8 --episodes 100
-```
 
 ---
 
@@ -105,9 +99,7 @@ agent chases big immediate captures and ignores whether it will actually finish.
 half the total progress reward available in a whole game.
 
 ### The state
-
-This is the part that took the most work, and the part most likely to break
-silently.
+.
 
 A Q-table is just a number stored per (state, action) pair. Those numbers are only
 trustworthy if each pair gets visited a reasonable number of times. So the state
